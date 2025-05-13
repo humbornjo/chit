@@ -1,7 +1,8 @@
-CFLAGS=-Wall -Wextra -std=c11 -pedantic -g
-FILE_NAME=himap
+FILE_NAME=main
 
-hash_teable: $(FILE_NAME).c
+CFLAGS=-Wall -Wextra -std=c11 -pedantic -g
+
+all: $(FILE_NAME).c
 	$(CC) $(CFLAGS) -o $(FILE_NAME) $(FILE_NAME).c
 	./$(FILE_NAME)
 
