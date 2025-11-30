@@ -1,0 +1,2 @@
+CompileFlags:
+  Remove: [-Wint-to-void-pointer-cast]
