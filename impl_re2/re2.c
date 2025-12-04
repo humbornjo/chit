@@ -538,6 +538,7 @@ typedef enum inst inst_em;
 enum inst {
   INST_ANY,
   INST_CHAR,
+  INST_RUNES,
   INST_EMPTY,
   INST_CAPTURE,
   INST_ALTERNATE,
@@ -559,8 +560,44 @@ code_st *code_from(inst_em inst, code_st *out) {
   memset(code, 0, sizeof(code_st));
   code->inst = inst;
   code->out = out;
+  code->out1 = NULL;
   code->runes = string_new();
   return code;
+}
+
+void code_print(code_st *code) {
+  switch (code->inst) {
+  case INST_ANY:
+    printf("any\n");
+    break;
+  case INST_CHAR:
+    printf("char %s\n", string_data(code->runes));
+    code_print(code->out);
+    break;
+  case INST_RUNES:
+    printf("runes %s\n", string_data(code->runes));
+    code_print(code->out);
+    break;
+  case INST_EMPTY:
+    printf("empty\n");
+    break;
+  case INST_CAPTURE:
+    printf("capture %d\n", code->arg);
+    break;
+  case INST_ALTERNATE:
+    printf("alternate\n");
+    printf("\nout\n");
+    code_print(code->out);
+    printf("\nout1\n");
+    code_print(code->out1);
+    break;
+  case INST_ALTMATCH:
+    printf("altmatch %d\n", code->arg);
+    break;
+  case INST_MATCH:
+    printf("match %d\n", code->arg);
+    break;
+  }
 }
 
 typedef struct ptrlist ptrlist_st;
@@ -569,8 +606,14 @@ struct ptrlist {
   ptrlist_st *next;
 };
 
+ptrlist_st *ptrlist_from(code_st **code) {
+  ptrlist_st *l;
+  l = (ptrlist_st *)code;
+  l->next = NULL;
+  return l;
+}
+
 void ptrlist_append(ptrlist_st *l, ptrlist_st *l1) {
-  ptrlist_st *oldl = l;
   while (l->next)
     l = l->next;
   l->next = l1;
@@ -584,7 +627,7 @@ struct frag {
 
 void frag_patch(ptrlist_st *out, code_st *code) {
   ptrlist_st *next;
-  for (; out->next; out = next) {
+  for (; out; out = next) {
     next = out->next;
     out->code = code;
   }
@@ -592,8 +635,8 @@ void frag_patch(ptrlist_st *out, code_st *code) {
 
 void frag_concat(frag_st *f, frag_st f1) {
   if (f->start == NULL) {
-    f->start = f1.start;
     f->out = f1.out;
+    f->start = f1.start;
     return;
   }
   frag_patch(f->out, f1.start);
@@ -609,7 +652,6 @@ void frag_alternate(frag_st *f, frag_st f1) {
   code_st *code = code_from(INST_ALTERNATE, NULL);
   code->out = f->start;
   code->out1 = f1.start;
-
   f->start = code;
   ptrlist_append(f->out, f1.out);
 }
@@ -625,17 +667,18 @@ frag_st _compile(regex_st *re) {
     break;
   case OP_LITERAL:
     for (int i = 0; i < string_len(re->runes); i++) {
-      frag_st f = {.start = code_from(INST_CHAR, NULL)};
-      f.out = (ptrlist_st *)(&f.start->out);
-      string_append(f.start->runes, (char[2]){string_data(re->runes)[i], '\0'});
+      char c = string_data(re->runes)[i];
+      code_st *code = code_from(INST_CHAR, NULL);
+      frag_st f = {.start = code, .out = ptrlist_from(&(code->out))};
+      string_append(f.start->runes, (char[2]){c, '\0'});
       frag_concat(&frag, f);
     }
     break;
-  // case OP_CLASS:
-  //   code_st *code = code_from(INST_CLASS, re->runes);
-  //   frag->start = code;
-  //   frag->out = (ptrlist_st *)(&code.out);
-  //   break;
+  case OP_CLASS:
+    frag.start = code_from(INST_RUNES, NULL);
+    frag.out = (ptrlist_st *)(&frag.start->out);
+    string_append(frag.start->runes, string_data(re->runes));
+    break;
   case OP_ALTERNATE:
     for (int i = 0; i < re->len; i++) {
       frag_alternate(&frag, _compile(re->subs[i]));
@@ -643,9 +686,9 @@ frag_st _compile(regex_st *re) {
     break;
   // case OP_PLUS:
   //   _compile(re->subs[0]) frag_concat(&frag, );
-  // case OP_STAR:
-  //   frag_star(frag, _compile(re->subs[0]));
-  //   break;
+  case OP_STAR:
+    frag_star(frag, _compile(re->subs[0]));
+    break;
   // case OP_QUEST:
   //   frag_quest(frag, _compile(re->subs[0]));
   //   break;
@@ -674,7 +717,7 @@ code_st *compile(regex_st *re) {
 
 int main(int argc, char **argv) {
   // char *pattrn = "\\\\a|(bc)|de|f[ab]ghi*k+m{1,2}";
-  char *pattrn = "abc";
+  char *pattrn = "a|fasdf[ab]abb";
 
   parse_error_st error = {0};
   regex_st *re = parse(pattrn, &error);
@@ -690,6 +733,8 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
   regex_free(re);
+
+  code_print(prog);
 
   // match(prog_t *prog, char *text);
   return 0;
