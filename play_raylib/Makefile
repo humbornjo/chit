@@ -1,18 +1,26 @@
-CC         = clang
+CC     = clang
 
 CFLAGS = -Wall -Werror
 
-TARGET     := ray
+OBJS = libraylib.a
 
-# Build Target
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) -I/opt/homebrew/include -L/opt/homebrew/lib -lraylib -o $(TARGET) main.c 
+LDLIBS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
 
-# Clean Target
-.PHONY: clean
+all: snake
+
+snake: $(OBJS)
+	$(CC) $(CFLAGS) -o Snake main.c $(OBJS) $(LDLIBS)
+
 clean:
-	rm -f $(TARGET)
+	make -C lib/external/raylib/src clean
+	rm -f ./Snake ./*.o ./*.a
 
-# Phony target to prevent conflicts with files named "all" or "clean"
-.PHONY: all
-all: $(TARGET)
+libraylib.a:
+	make -C lib/external/raylib/src
+	cp ./lib/external/raylib/src/libraylib.a ./
+
+submodules:
+	git submodule init
+	git submodule update
+
+.PHONY: all snake
